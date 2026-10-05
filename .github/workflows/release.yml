@@ -1,4 +1,4 @@
-name: build-windows-tauri
+name: build-windows
 
 # 触发方式：
 #  1) 推送以 v 开头的 tag（例如 v0.2.2）——自动用该 tag 建/更新 GitHub Release。
