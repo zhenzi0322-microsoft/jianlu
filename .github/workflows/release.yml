@@ -81,15 +81,20 @@ jobs:
       # 签名：env 里的 TAURI_SIGNING_PRIVATE_KEY 生效时，tauri-action 会生成
       # .exe.sig 并填进 latest.json。**该 secret 缺失不会报错，只是静默不签名** ——
       # 那样应用能装、但自动更新会因验签失败被拒。发版前务必确认两个 secret 都已配。
+      #
+      # 【为什么分两条互斥的步骤，而不是加个条件参数】
+      # tauri-action 没有「跳过发布但仍构建」的开关（曾误用不存在的 skipRelease，
+      # 会被 Actions 忽略并告警）。要实现「手动触发留 tag 时只构建、不发 Release」，
+      # 只能用 step 级 if 分流：走 tauri-action 的会自动构建 + 发 Release；
+      # 走 npm run tauri:build 的只构建，产物留在 Actions artifact 里。
       - name: 构建、签名并发布到 GitHub Release
+        # tag 推送触发时自动用被推送的 tag；手动触发且填了 tag 才建 Release。
+        if: ${{ github.event_name == 'push' || inputs.tag_name != '' }}
         uses: tauri-apps/tauri-action@v0
         with:
           # 工程在 demo/ 子目录下（src-tauri 与 package.json 都在那儿）
           projectPath: ./demo
-          # tag 推送触发时 inputs.tag_name 为空，tauri-action 自动用被推送的 tag；
-          # 手动触发时用它填的值。留空则跳过建 Release，只保留构建产物。
           tagName: ${{ inputs.tag_name }}
-          skipRelease: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name == '' }}
           # __VERSION__ 会被替换为 tauri.conf.json 里的 version
           releaseName: 'JianLu v__VERSION__'
           releaseBody: |
@@ -98,6 +103,27 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: --bundles nsis
+
+      # 手动触发且没填 tag 的路径：只构建，不碰 Release。
+      # 产物作为 Actions artifact 保留 7 天，可在 Actions 页面直接下载。
+      - name: 仅构建（未填 tag 时）
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name == '' }}
+        working-directory: demo
+        shell: bash
+        run: npm run tauri:build -- --bundles nsis
+
+      - name: 打印产物目录
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name == '' }}
+        shell: pwsh
+        run: Get-ChildItem -Recurse ./demo/src-tauri/target/release/bundle/nsis
+
+      - name: 上传安装包 artifact
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: JianLu-windows-nsis
+          path: demo/src-tauri/target/release/bundle/nsis/*.exe
+          retention-days: 7
 
 # ─────────────────────────────────────────────────────────────────────────
 # 补充说明
