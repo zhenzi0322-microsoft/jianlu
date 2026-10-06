@@ -43,9 +43,11 @@ jobs:
             args: --bundles appimage
             label: Linux
           - os: macos-14
-            args: --target aarch64-apple-darwin --target x86_64-apple-darwin --bundles app,dmg
-            label: macOS (aarch64 + x86_64)
-          # ❗ 删掉原来的 macos‑13 矩阵项，交给下面 release_macos_intel 串行执行
+            args: --target aarch64-apple-darwin --bundles app,dmg
+            label: macOS aarch64
+          - os: macos-14
+            args: --target x86_64-apple-darwin --bundles app,dmg
+            label: macOS x86_64
     name: Build ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     steps:
