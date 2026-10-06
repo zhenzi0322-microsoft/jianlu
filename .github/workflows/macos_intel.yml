@@ -16,52 +16,52 @@ permissions:
 
 jobs:
   release:
-      needs: release_main
-      name: Build macOS (Intel)
-      runs-on: macos-13
-      steps:
-        # 和上面完全一样的 steps，args固定 macos‑13 参数
-        - name: Clone Codeup private repo into demo
-          env:
-            CODEUP_TOKEN: ${{ secrets.CODEUP_TOKEN }}
-          run: |
-            git clone "https://oauth2:${env:CODEUP_TOKEN}@codeup.aliyun.com/zheniz0322/LYZDownload.git" demo
-          shell: pwsh
+    needs: release_main
+    name: Build macOS (Intel)
+    runs-on: macos-13
+    steps:
+      # 和上面完全一样的 steps，args固定 macos‑13 参数
+      - name: Clone Codeup private repo into demo
+        env:
+          CODEUP_TOKEN: ${{ secrets.CODEUP_TOKEN }}
+        run: |
+          git clone "https://oauth2:${env:CODEUP_TOKEN}@codeup.aliyun.com/zheniz0322/LYZDownload.git" demo
+        shell: pwsh
 
-        - uses: actions/setup-node@v6
-          with:
-            node-version: 22
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
 
-        - name: Install Rust
-          uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
-        - name: Install frontend dependencies
-          working-directory: demo
-          run: npm install
+      - name: Install frontend dependencies
+        working-directory: demo
+        run: npm install
 
-        - name: Build & Publish
-          uses: tauri-apps/tauri-action@v0
-          env:
-            TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-            TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          with:
-            tagName: ${{ github.ref_name }}
-            releaseName: "JianLu ${{ github.ref_name }}"
-            releaseBody: |
-              ## 新增
-              - 全新支持 macOS（Apple Silicon + Intel），自动更新同步覆盖
-              - 全新支持 Linux，发布 AppImage
-              - 检查更新命中新版时改为弹窗提示，并展示更新说明
-              - 协议唤起（浏览器扩展）改为弹窗确认，可改文件名、目录、代理与分类
-              ## 修复
-              - 修复 AppImage 启动后导致系统文件管理器（nautilus）崩溃：移除打包进包的 OpenSSL
-              - 修复文件后缀错误：URL 为 `.img` / `.php` 等占位后缀时，按 Content‑Type 纠正为真实类型
-              - 修复「漏 import 导致初始化中断，全站按钮失效」
-              - 修复添加任务弹窗点外围误关闭导致已填内容丢失
-              ## 优化
-              - 添加任务弹窗标题图标缩小并与标题对齐
-              - 协议唤起弹窗的保存目录默认沿用上一次实际使用的目录
-            includeUpdaterJson: true
-            updaterJsonPreferNsis: true
-            args: --target x86_64-apple-darwin --bundles app,dmg
+      - name: Build & Publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "JianLu ${{ github.ref_name }}"
+          releaseBody: |
+            ## 新增
+            - 全新支持 macOS（Apple Silicon + Intel），自动更新同步覆盖
+            - 全新支持 Linux，发布 AppImage
+            - 检查更新命中新版时改为弹窗提示，并展示更新说明
+            - 协议唤起（浏览器扩展）改为弹窗确认，可改文件名、目录、代理与分类
+            ## 修复
+            - 修复 AppImage 启动后导致系统文件管理器（nautilus）崩溃：移除打包进包的 OpenSSL
+            - 修复文件后缀错误：URL 为 `.img` / `.php` 等占位后缀时，按 Content‑Type 纠正为真实类型
+            - 修复「漏 import 导致初始化中断，全站按钮失效」
+            - 修复添加任务弹窗点外围误关闭导致已填内容丢失
+            ## 优化
+            - 添加任务弹窗标题图标缩小并与标题对齐
+            - 协议唤起弹窗的保存目录默认沿用上一次实际使用的目录
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: --target x86_64-apple-darwin --bundles app,dmg
