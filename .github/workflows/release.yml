@@ -1,6 +1,38 @@
+name: Release
+# 自动构建并发布到 GitHub Releases，同时生成自动更新所需的
+# latest.json + 安装包签名 (.sig)。打 tag（如 v0.3.7）推送即触发。
+#
+# ── 平台矩阵 ─────────────────────────────────────────────────────────────
+# Windows → NSIS 安装包（setup.exe + .sig），自动更新对应 latest.json 的
+#            `windows-x86_64` 条目；
+# Linux   → AppImage（.AppImage + .sig），自动更新对应 `linux-x86_64` 条目。
+#
+# ⚠️ **Tauri 自动更新在 Linux 上只支持 AppImage**。
+#    deb / rpm 可以打出来，但它们**不在 updater 的支持范围内**，
+#    所以 Linux 侧只打 appimage —— 别加 deb/rpm 指望走更新通道。
+#    用 deb 分发的用户需要手动下载替换。
+#
+# ⚠️ **必须用 ubuntu-22.04，不要用 ubuntu-latest**。
+#    官方明确建议「用你打算支持的最老基线系统构建」，因为 glibc 这类核心库会
+#    被构建环境抬高最低版本要求；在更新的基线上打出来的包拿到老系统上会报
+#    `GLIBC_2.xx not found`。22.04 是既提供 libwebkit2gtk-4.1-dev 又足够老的基线。
+#    （Debian 12 同理。）
+#
+# ✅ 两个 job 产出**同一个** latest.json 是安全的：tauri-action 会先下载该 Release
+#    上现有的 latest.json，只更新「本次构建对应的那一个 platform key」，再整体传回，
+#    所以并行构建不会互相覆盖（源码 src/upload-version-json.ts 的合并逻辑）。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+permissions:
+  contents: write
 jobs:
-  release_main:
+  release_main:  # ✅ 修改job ID为 release_main，needs才能识别
     strategy:
+      # Linux 侧首次构建可能踩到环境问题；别让它把 Windows 的发布一起取消掉，
+      # 否则一次失败会连本来没问题的 Windows 安装包也发不出去。
       fail-fast: false
       matrix:
         include:
@@ -13,16 +45,20 @@ jobs:
           - os: macos-14
             args: --target aarch64-apple-darwin --target x86_64-apple-darwin --bundles app,dmg
             label: macOS (aarch64 + x86_64)
+          # ❗ 删掉原来的 macos‑13 矩阵项，交给下面 release_macos_intel 串行执行
     name: Build ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     steps:
       - name: Clone Codeup private repo into demo
         env:
           CODEUP_TOKEN: ${{ secrets.CODEUP_TOKEN }}
+        # 注意仓库地址保持统一
         run: |
           git clone "https://oauth2:${env:CODEUP_TOKEN}@codeup.aliyun.com/zheniz0322/Rust/tauri/jianlu.git" demo
         shell: pwsh
-
+      # Tauri v2 在 Linux 上编译 WebView 界面需要 webkit2gtk 4.1；
+      # 托盘图标（build_tray）需要 appindicator；打 AppImage 需要 patchelf。
+      # 包清单来自官方 v2 文档 v2.tauri.app/start/prerequisites。
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         run: |
@@ -38,30 +74,41 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
-
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          # macOS 同时安装两个编译目标
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
-
       - name: Install frontend dependencies
         working-directory: demo
         run: npm install
-
+      # tauri-action 会：① 执行 beforeBuildCommand(npm run build) ② 用仓库密钥签名
+      # ③ 产出安装包 + .sig + latest.json ④ 上传到本次 tag 的 Release。
+      # includeUpdaterJson: true 是关键：它负责生成并上传 latest.json，
+      # 这样端点的 https://github.com/.../releases/latest/download/latest.json 才有内容。
+      # updaterJsonPreferNsis: true 只在「NSIS 与 MSI 同时存在」时影响选哪个，
+      # 本项目 Windows 侧只打 nsis；对 Linux 的 AppImage 条目无副作用。
+      #
+      # args 里用 --bundles 按平台覆盖打包目标：tauri.conf.json 的
+      # `bundle.targets` 写的是 ["nsis"]（Windows 专属），若不覆盖，
+      # 在 Linux 上会尝试打 NSIS 并直接失败。
       - name: Build & Publish
         uses: tauri-apps/tauri-action@v0
         env:
+          # 私钥：在仓库 Settings → Secrets 里配置 TAURI_SIGNING_PRIVATE_KEY
+          # （内容 = 你本地 `npm run tauri signer generate` 生成的 .key 文件全文）。
+          # 若生成时设了密码，再配 TAURI_SIGNING_PRIVATE_KEY_PASSWORD。
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           GITHUB_TOKEN: ${{ github.token }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "JianLu ${{ github.ref_name }}"
+          releaseName: "JianLu ${{ github.ref_name }}" # ✅ 统一名称
+          # ── 更新说明（**每次发版前手动改这里**）─────────────────────────
+          # 这段文字会：① 显示在 GitHub Release 页面；② 写进 latest.json 的 notes；
+          #            ③ 在应用内「发现新版本」弹窗里作为更新说明展示。
+          # 支持 Markdown（前端会渲染标题、列表、行内代码与粗体）。
+          # 下面预填的是 v0.4.0 的内容，下次发版请整份替换。
           releaseBody: |
             ## 新增
             - 全新支持 macOS（Apple Silicon + Intel），自动更新同步覆盖
@@ -78,4 +125,6 @@ jobs:
             - 协议唤起弹窗的保存目录默认沿用上一次实际使用的目录
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
+          # 打包目标按平台在 matrix 里定好（Windows=nsis / Linux=appimage /
+          # macOS=app+--target），这里原样透传。
           args: ${{ matrix.args }}
