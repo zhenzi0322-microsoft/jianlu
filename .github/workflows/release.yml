@@ -76,11 +76,19 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
+
       - uses: actions/setup-node@v6
         with:
           node-version: 22
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+      
+      - name: Add macOS cross targets
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
       - name: Install frontend dependencies
         working-directory: demo
         run: npm install
