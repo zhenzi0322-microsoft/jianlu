@@ -26,6 +26,17 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+    tag_name:
+      description: '要创建 / 更新的 Release tag（手动触发时填写；tag 推送触发可留空）'
+      required: false
+      default: ''
+      type: string   # 显式声明单行文本框，网页显示输入框
+    release_body:
+      description: "Release 更新说明，可粘贴换行文本"
+      required: false
+      default: ''
+      type: string
 permissions:
   contents: write
 jobs:
@@ -112,8 +123,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "JianLu ${{ github.ref_name }}" # ✅ 统一名称
+          tagName: ${{ inputs.tag_name || github.ref_name }}
+          releaseName: "JianLu ${{ inputs.tag_name || github.ref_name }}" # ✅ 统一名称
           # ── 更新说明（**每次发版前手动改这里**）─────────────────────────
           # 这段文字会：① 显示在 GitHub Release 页面；② 写进 latest.json 的 notes；
           #            ③ 在应用内「发现新版本」弹窗里作为更新说明展示。
